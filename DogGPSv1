@@ -1,0 +1,115 @@
+//AKfycbyupxAzdEbbdVU7bNqoTq5vQkk0vPNrF4ovOgmKI0r6Ev0S83ghi3mc8MYfN7MUA63A
+#include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
+#include <Arduino.h>
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+
+// Wi-Fi credentials
+const char* ssid = "MEB1";
+const char* password = "Meb@786.1";
+
+// Google Apps Script Deployment URL
+const char* host = "script.google.com";
+const int httpsPort = 443;  // HTTPS port
+String GAS_ID = "AKfycbyupxAzdEbbdVU7bNqoTq5vQkk0vPNrF4ovOgmKI0r6Ev0S83ghi3mc8MYfN7MUA63A"; // Replace with your GAS deployment ID
+
+WiFiClientSecure client;
+
+// GPS setup
+TinyGPSPlus gps; // Create an object of the TinyGPSPlus class
+SoftwareSerial ss(12, 14); // RX, TX pins for GPS (can be adjusted based on your wiring)
+
+// Timing
+unsigned long previousMillis = 0;
+const long interval = 2000;  // 2 seconds
+
+void setup() {
+  Serial.begin(115200);  // For serial monitor output
+  ss.begin(9600);  // Initialize GPS communication at 9600 baud
+
+  connectToWiFi();
+  client.setInsecure();  // Disable SSL certificate verification for testing
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+
+  // Read GPS data from the GPS module
+  while (ss.available() > 0) {
+    gps.encode(ss.read());
+  }
+
+  // If GPS has a fix (location is updated)
+  if (gps.location.isUpdated()) {
+    // Every 2 seconds, send GPS coordinates to Google Sheets
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;
+
+      double latitude = gps.location.lat();
+      double longitude = gps.location.lng();
+
+      // Display the GPS coordinates in the Serial Monitor
+      Serial.print("Latitude: ");
+      Serial.print(latitude, 6);
+      Serial.print(", Longitude: ");
+      Serial.println(longitude, 6);
+
+      // Send GPS coordinates to Google Sheets
+      sendDataToGoogleSheets(latitude, longitude);
+    }
+  } else {
+    // If no GPS fix, print a message
+    Serial.println("Waiting for GPS fix...");
+  }
+}
+
+void sendDataToGoogleSheets(double latitude, double longitude) {
+  Serial.println("Connecting to Google Sheets...");
+
+  if (!client.connect(host, httpsPort)) {
+    Serial.println("Connection failed.");
+    return;
+  }
+
+  // Construct the request URL with GPS data (latitude and longitude)
+  String url = "/macros/s/" + GAS_ID + "/exec?latitude=" + String(latitude, 6) + 
+               "&longitude=" + String(longitude, 6);
+
+  Serial.print("Requesting URL: ");
+  Serial.println(url);
+
+  // Send HTTP GET request
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+               "Host: " + host + "\r\n" +
+               "User-Agent: ESP8266\r\n" +
+               "Connection: close\r\n\r\n");
+
+  // Wait for server response
+  while (client.connected() || client.available()) {
+    if (client.available()) {
+      String line = client.readStringUntil('\n');
+      Serial.println(line);
+    }
+  }
+  Serial.println("Data sent to Google Sheets.");
+}
+
+void connectToWiFi() {
+  Serial.print("Connecting to Wi-Fi");
+
+  WiFi.begin(ssid, password);
+
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWi-Fi Connected.");
+  } else {
+    Serial.println("\nWi-Fi Connection Failed.");
+  }
+}
