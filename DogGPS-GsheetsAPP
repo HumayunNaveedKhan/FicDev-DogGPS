@@ -1,0 +1,15 @@
+function doGet(e) {
+  // Get the latitude and longitude from the URL parameters
+  var latitude = e.parameter.latitude;
+  var longitude = e.parameter.longitude;
+
+  // Open the Google Sheet by its ID
+  var sheet = SpreadsheetApp.openById('1YL7b5t9SLL5QZxMPXchya4iP9g7d6HkC0rFZBG2jMcQ'); // Replace with your sheet ID
+  var sheetName = sheet.getSheets()[0]; // Select the first sheet
+  
+  // Append the new data (latitude, longitude, and timestamp) to the sheet
+  sheetName.appendRow([new Date(), latitude, longitude]);
+  
+  // Return a response to confirm the data was received
+  return ContentService.createTextOutput("Data received: Latitude = " + latitude + ", Longitude = " + longitude);
+}
